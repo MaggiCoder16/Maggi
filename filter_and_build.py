@@ -5,7 +5,6 @@ import io
 import chess
 import chess.pgn
 import chess.polyglot
-import chess.variant
 
 BOTS = ["NimsiluBot", "ToromBot"]
 VARIANT = "kingofthehill"
@@ -18,6 +17,12 @@ MAX_BOOK_WEIGHT = 10000
 
 PGN_OUTPUT = f"{VARIANT}_games.pgn"
 BOOK_OUTPUT = f"{VARIANT}_book.bin"
+
+CENTER_SQUARES = [chess.D4, chess.D5, chess.E4, chess.E5]
+
+def is_koth_win(board):
+    king_square = board.king(board.turn)
+    return king_square in CENTER_SQUARES
 
 def fetch_all_games_for_bot(bot: str) -> list[str]:
     print(f"Fetching {VARIANT} games for {bot} (rating >= {MIN_ELO})...")
@@ -34,14 +39,14 @@ def fetch_all_games_for_bot(bot: str) -> list[str]:
         "opening": "false",
     }
 
-    all_pgns: list[str] = []
-    until_ts: int | None = None
+    all_pgns = []
+    until_ts = None
     total_lines = 0
     kept = 0
 
     while True:
         if until_ts is not None:
-            params["until"] = until_ts 
+            params["until"] = until_ts
         else:
             params.pop("until", None)
 
@@ -79,7 +84,7 @@ def fetch_all_games_for_bot(bot: str) -> list[str]:
                 continue
 
             variant = (game.get("variant") or "").lower()
-            if variant and variant != VARIANT:
+            if variant != VARIANT:
                 continue
 
             pgn = game.get("pgn")
@@ -90,7 +95,7 @@ def fetch_all_games_for_bot(bot: str) -> list[str]:
         print(f"  chunk: got {batch_count} games, kept {kept} total so far")
 
         if batch_count == 0 or earliest_ts is None:
-            break  
+            break
 
         until_ts = earliest_ts - 1
         time.sleep(SLEEP_BETWEEN_CHUNKS)
@@ -139,7 +144,7 @@ class Book:
                 if bm.weight <= 0 or bm.move is None:
                     continue
                 m = bm.move
-                if "@" in m.uci():  
+                if "@" in m.uci():
                     continue
                 mi = m.to_square + (m.from_square << 6)
                 if m.promotion:
@@ -172,24 +177,34 @@ def build_book_from_pgn(pgn_path, bin_path):
         if (game.headers.get("Variant", "") or "").lower() != VARIANT:
             continue
 
-        board = chess.variant.kingofthehillBoard()
+        board = chess.Board()
         result = game.headers.get("Result", "*")
-        for ply, move in enumerate(game.mainline_moves()):
-            if ply >= MAX_PLY:
-                break
-            k = key_hex(board)
-            pos = book.get_position(k)
-            bm = pos.get_move(move.uci())
-            bm.move = move
 
-            # Weight stronger moves
-            if result == "1-0":
-                bm.weight += 2 if board.turn == chess.WHITE else 0
-            elif result == "0-1":
-                bm.weight += 2 if board.turn == chess.BLACK else 0
-            elif result == "1/2-1/2":
-                bm.weight += 1
-            board.push(move)
+        try:
+            for ply, move in enumerate(game.mainline_moves()):
+                if ply >= MAX_PLY:
+                    break
+                k = key_hex(board)
+                pos = book.get_position(k)
+                bm = pos.get_move(move.uci())
+                bm.move = move
+
+                if result == "1-0":
+                    bm.weight += 2 if board.turn == chess.WHITE else 0
+                elif result == "0-1":
+                    bm.weight += 2 if board.turn == chess.BLACK else 0
+                elif result == "1/2-1/2":
+                    bm.weight += 1
+
+                board.push(move)
+
+                # Optional: boost if king reaches center
+                if is_koth_win(board):
+                    bm.weight += 1
+
+        except Exception as e:
+            print(f"Error in game {processed}: {e}")
+            continue
 
         processed += 1
         if processed % 100 == 0:
