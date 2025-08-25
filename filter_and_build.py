@@ -8,7 +8,7 @@ import chess.polyglot
 import chess.variant
 
 BOTS = ["NimsiluBot", "ToromBot"]
-VARIANT = "crazyhouse"
+VARIANT = "kingofthehill"
 MIN_ELO = 2250
 CHUNK_SIZE = 5000
 REQUEST_TIMEOUT = 120
@@ -172,7 +172,7 @@ def build_book_from_pgn(pgn_path, bin_path):
         if (game.headers.get("Variant", "") or "").lower() != VARIANT:
             continue
 
-        board = chess.variant.CrazyhouseBoard()
+        board = chess.variant.kingofthehillBoard()
         result = game.headers.get("Result", "*")
         for ply, move in enumerate(game.mainline_moves()):
             if ply >= MAX_PLY:
