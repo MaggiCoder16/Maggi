@@ -1,0 +1,36 @@
+name: Download Syzygy from Sesse.net
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fetch-syzygy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo (no LFS)
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Disable Git LFS filters
+        run: git lfs uninstall
+
+      - name: Create engines/syzygy directory
+        run: mkdir -p engines/syzygy
+
+      - name: Download full 3-4-5 Syzygy set
+        run: |
+          cd engines/syzygy
+          wget -c -r --no-parent --no-directories -e robots=off \
+            http://tablebase.sesse.net/syzygy/3-4-5/
+
+      - name: Show some downloaded files
+        run: ls -lh engines/syzygy | head -20
+
+      - name: Commit and push binaries
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add engines/syzygy
+          git commit -m "Add full 3-4-5 Syzygy tablebases (binary)" || echo "No changes to commit"
+          git push
